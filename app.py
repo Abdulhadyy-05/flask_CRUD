@@ -1,9 +1,13 @@
+import os
 
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
+from flasgger import Swagger
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///users.db'
+Swagger(app)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://postgres:admin321@localhost/first_db')
 db = SQLAlchemy(app)
 
 class User(db.Model):
@@ -17,6 +21,21 @@ class User(db.Model):
             'name': self.name,
             'email': self.email
         }
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'title': self.title,
+            'content': self.content,
+            'user_id': self.user_id
+        }
+
 
 with app.app_context():
     db.create_all()
@@ -55,5 +74,18 @@ def delete_user(user_id):
     db.session.commit()
     return jsonify({'message': 'User deleted successfully'})
 
+@app.route("/api/posts", methods=["POST"])
+def create_post():
+    data = request.get_json()
+    post = Post(title=data.get('title'), content=data.get('content'), user_id=data.get('user_id'))
+    db.session.add(post)
+    db.session.commit()
+    return jsonify(post.to_dict()), 201
+
+@app.route("/api/posts", methods=["GET"])
+def get_posts():
+    posts = Post.query.all()
+    return jsonify([post.to_dict() for post in posts]), 200
+
 if __name__ == "__main__":
-    app.run(debug=True) 
+    app.run(host="0.0.0.0", debug=True) 
